@@ -164,7 +164,7 @@ func (server *Server) handle(c net.Conn, handler Handler) {
 	var w Writer = newDataWriter(c)
 	var r Reader = newDataReader(c)
 
-	handler.ServeTELNET(ctx, w, r)
+	handler.ServeTELNET(ctx, &c, w, r)
 	c.Close()
 }
 
