@@ -24,8 +24,10 @@ type ShellHandler struct {
 
 	ExitCommandName string
 	Prompt          string
-	WelcomeMessage  string
-	ExitMessage     string
+	PromptHandler   func(telnet.Context) []byte
+
+	WelcomeMessage string
+	ExitMessage    string
 }
 
 func NewShellHandler() *ShellHandler {
@@ -105,14 +107,17 @@ func (telnetHandler *ShellHandler) ServeTELNET(ctx telnet.Context, writer telnet
 
 	colonSpaceCommandNotFoundEL := []byte(": command not found\r\n")
 
-	var prompt bytes.Buffer
 	var exitCommandName string
 	var welcomeMessage string
 	var exitMessage string
 
-	prompt.WriteString(telnetHandler.Prompt)
-
-	promptBytes := prompt.Bytes()
+	promptBytes := []byte(telnetHandler.Prompt)
+	promptHandler := func() []byte {
+		if telnetHandler.PromptHandler == nil {
+			return promptBytes
+		}
+		return telnetHandler.PromptHandler(ctx)
+	}
 
 	exitCommandName = telnetHandler.ExitCommandName
 	welcomeMessage = telnetHandler.WelcomeMessage
@@ -123,11 +128,11 @@ func (telnetHandler *ShellHandler) ServeTELNET(ctx telnet.Context, writer telnet
 		return
 	}
 	logger.Debugf("Wrote welcome message: %q.", welcomeMessage)
-	if _, err := oi.LongWrite(writer, promptBytes); nil != err {
+	if _, err := oi.LongWrite(writer, promptHandler()); nil != err {
 		logger.Errorf("Problem long writing prompt: %v", err)
 		return
 	}
-	logger.Debugf("Wrote prompt: %q.", promptBytes)
+	logger.Debugf("Wrote prompt: %q.", promptHandler())
 
 	var buffer [1]byte // Seems like the length of the buffer needs to be small, otherwise will have to wait for buffer to fill up.
 	p := buffer[:]
@@ -151,7 +156,7 @@ func (telnetHandler *ShellHandler) ServeTELNET(ctx telnet.Context, writer telnet
 
 			if "\r\n" == lineString {
 				line.Reset()
-				if _, err := oi.LongWrite(writer, promptBytes); nil != err {
+				if _, err := oi.LongWrite(writer, promptHandler()); nil != err {
 					return
 				}
 				continue
@@ -163,7 +168,7 @@ func (telnetHandler *ShellHandler) ServeTELNET(ctx telnet.Context, writer telnet
 			logger.Tracef("Tokens: %v", fields)
 			if len(fields) <= 0 {
 				line.Reset()
-				if _, err := oi.LongWrite(writer, promptBytes); nil != err {
+				if _, err := oi.LongWrite(writer, promptHandler()); nil != err {
 					return
 				}
 				continue
@@ -194,7 +199,7 @@ func (telnetHandler *ShellHandler) ServeTELNET(ctx telnet.Context, writer telnet
 				oi.LongWrite(writer, []byte(field0))
 				oi.LongWrite(writer, colonSpaceCommandNotFoundEL)
 				line.Reset()
-				if _, err := oi.LongWrite(writer, promptBytes); nil != err {
+				if _, err := oi.LongWrite(writer, promptHandler()); nil != err {
 					return
 				}
 				continue
@@ -206,7 +211,7 @@ func (telnetHandler *ShellHandler) ServeTELNET(ctx telnet.Context, writer telnet
 				//@TODO: Need to use a different error message.
 				oi.LongWrite(writer, colonSpaceCommandNotFoundEL)
 				line.Reset()
-				oi.LongWrite(writer, promptBytes)
+				oi.LongWrite(writer, promptHandler())
 				continue
 			}
 
@@ -232,7 +237,7 @@ func (telnetHandler *ShellHandler) ServeTELNET(ctx telnet.Context, writer telnet
 				//@TODO:
 			}
 			line.Reset()
-			if _, err := oi.LongWrite(writer, promptBytes); nil != err {
+			if _, err := oi.LongWrite(writer, promptHandler()); nil != err {
 				return
 			}
 		}
